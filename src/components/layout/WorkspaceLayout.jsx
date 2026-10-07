@@ -95,18 +95,22 @@ const WorkspaceLayout = () => {
                 className={({ isActive }) =>
                   `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                     isActive
-                      ? 'bg-[#E7F0E9] text-[#365742] shadow-xs'
-                      : 'text-[#52525B] hover:bg-[#E7F0E9]/70 hover:text-[#365742]'
+                      ? 'bg-[#E7F0E9] text-[#18181B] shadow-xs'
+                      : 'text-[#52525B] hover:bg-[#E7F0E9] hover:text-[#18181B]'
                   }`
                 }
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <Icon className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${isActive ? 'text-[#365742]' : 'text-[#52525B] group-hover:text-[#365742]'}`} />
+                  <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${
+                    isActive ? 'bg-[#D8E6DB] text-[#18181B]' : 'text-[#52525B] group-hover:bg-[#D8E6DB]/60 group-hover:text-[#18181B]'
+                  }`}>
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                  </div>
                   <span className="truncate">{item.label}</span>
                 </div>
                 {item.badge && (
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-                    isActive ? 'bg-[#C8E6C9] text-[#2D5A3E]' : 'bg-[#F4F4F2] text-[#52525B] border border-[#E4E4E0]'
+                    isActive ? 'bg-[#D8E6DB] text-[#18181B]' : 'bg-[#F4F4F2] text-[#52525B] border border-[#E4E4E0]'
                   }`}>
                     {item.badge}
                   </span>
@@ -118,14 +122,14 @@ const WorkspaceLayout = () => {
 
         {/* Memory Index Widget */}
         <div className="p-4 border-t border-[#E4E4E0] bg-[#F8F8F6]">
-          <div className="bg-white border border-[#E4E4E0] rounded-xl p-3.5 shadow-xs space-y-2 hover:border-[#C2E0CB] transition-colors">
+          <div className="bg-white border border-[#E4E4E0] rounded-xl p-3.5 shadow-xs space-y-2 hover:bg-[#E7F0E9]/40 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-1.5 text-xs font-bold text-[#18181B]">
-                <span className="h-2 w-2 rounded-full bg-[#15803D]" />
+                <span className="h-2 w-2 rounded-full bg-[#18181B]" />
                 <Brain className="w-4 h-4 text-[#18181B]" />
                 <span>Memory Index</span>
               </div>
-              <span className="text-[10px] font-mono text-[#15803D] bg-[#F0FDF4] border border-[#DCFCE7] px-1.5 py-0.5 rounded font-medium">
+              <span className="text-[10px] font-mono text-[#18181B] bg-[#F4F4F5] border border-[#E4E4E0] px-1.5 py-0.5 rounded font-medium">
                 active
               </span>
             </div>
@@ -147,7 +151,7 @@ const WorkspaceLayout = () => {
             {/* Mobile menu trigger button */}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden text-[#18181B] p-2 rounded-xl border border-[#E4E4E0] hover:bg-[#E7F0E9] hover:text-[#365742] transition-colors focus:outline-none"
+              className="lg:hidden text-[#18181B] p-2 rounded-xl border border-[#E4E4E0] hover:bg-[#E7F0E9] transition-colors focus:outline-none"
               aria-label="Open mobile menu"
             >
               <Menu className="w-4 h-4" />
@@ -169,8 +173,8 @@ const WorkspaceLayout = () => {
           </div>
 
           <div className="flex items-center space-x-3 shrink-0">
-            <div className="flex items-center space-x-1.5 text-xs font-semibold text-[#15803D] bg-[#F0FDF4] border border-[#DCFCE7] px-2.5 py-1 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-[#15803D] animate-pulse"></span>
+            <div className="flex items-center space-x-1.5 text-xs font-semibold text-[#18181B] bg-[#F4F4F5] border border-[#E4E4E0] px-2.5 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-[#18181B] animate-pulse"></span>
               <span className="hidden xs:inline text-[11px]">Realtime Live</span>
             </div>
           </div>
@@ -226,8 +230,8 @@ const WorkspaceLayout = () => {
                         className={({ isActive }) =>
                           `flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all ${
                             isActive
-                              ? 'bg-[#E7F0E9] text-[#365742] shadow-xs'
-                              : 'text-[#52525B] hover:bg-[#E7F0E9]/70 hover:text-[#365742]'
+                              ? 'bg-[#E7F0E9] text-[#18181B] shadow-xs'
+                              : 'text-[#52525B] hover:bg-[#E7F0E9] hover:text-[#18181B]'
                           }`
                         }
                       >
@@ -249,9 +253,9 @@ const WorkspaceLayout = () => {
                   <Link
                     to="/workspaces"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="w-full btn-secondary text-xs flex items-center justify-center space-x-2 py-2.5"
+                    className="flex items-center justify-center space-x-2 w-full py-2.5 bg-white border border-[#E4E4E0] rounded-xl text-xs font-semibold text-[#18181B] hover:bg-[#E7F0E9] transition-colors"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <ArrowLeft className="w-4 h-4" />
                     <span>Switch Workspace</span>
                   </Link>
                 </div>
@@ -260,10 +264,10 @@ const WorkspaceLayout = () => {
           )}
         </AnimatePresence>
 
-        {/* Viewport Area */}
-        <div className="flex-1 relative overflow-hidden bg-[#F8F8F6]">
+        {/* Nested Route Viewport */}
+        <main className="flex-1 overflow-hidden relative">
           <Outlet context={contextValue} />
-        </div>
+        </main>
       </div>
     </div>
   )

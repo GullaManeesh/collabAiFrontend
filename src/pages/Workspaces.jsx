@@ -63,16 +63,16 @@ const Workspaces = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#F8F8F6] text-[#1A2E22] p-4 sm:p-8 lg:p-10 font-sans overflow-y-auto selection:bg-zinc-200 selection:text-zinc-900">
+    <div className="min-h-screen w-full bg-[#F8F8F6] text-[#18181B] p-4 sm:p-8 lg:p-10 font-sans overflow-y-auto selection:bg-zinc-200 selection:text-zinc-900">
       {/* Top Header */}
       <header className="max-w-6xl mx-auto flex items-center justify-between border-b border-[#E4E4E0] pb-6 mb-8 select-none">
         <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 rounded-xl bg-[#DCFCE7] text-[#14532D] border border-[#BBF7D0] flex items-center justify-center shadow-xs shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#18181B] text-white border border-[#18181B] flex items-center justify-center shadow-xs shrink-0">
             <Layers className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-xl sm:text-2xl text-[#143A23] tracking-tight">CollabAI Workspaces</h1>
-            <p className="text-[#166534] text-xs mt-0.5">Select a workspace or create a new team environment</p>
+            <h1 className="font-display font-bold text-xl sm:text-2xl text-[#18181B] tracking-tight">CollabAI Workspaces</h1>
+            <p className="text-[#52525B] text-xs mt-0.5">Select a workspace or create a new team environment</p>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ const Workspaces = () => {
           
           <button 
             onClick={() => navigate('/login')}
-            className="inline-flex items-center space-x-1 text-[#166534] hover:text-[#DC2626] hover:bg-[#FEE2E2]/50 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center space-x-1 text-[#52525B] hover:text-[#DC2626] hover:bg-[#FEE2E2]/50 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />
@@ -101,11 +101,11 @@ const Workspaces = () => {
       <main className="max-w-6xl mx-auto">
         {workspaces.length === 0 ? (
           <div className="bg-white border border-[#E4E4E0] rounded-2xl p-8 sm:p-12 text-center max-w-xl mx-auto mt-12 flex flex-col items-center shadow-xs">
-            <div className="w-12 h-12 rounded-2xl bg-[#DCFCE7] flex items-center justify-center text-[#14532D] mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#18181B] flex items-center justify-center text-white mb-4">
               <Briefcase className="w-6 h-6" />
             </div>
-            <h3 className="font-display font-bold text-lg text-[#143A23]">No workspaces found</h3>
-            <p className="text-[#166534] text-xs max-w-sm mt-1.5 mb-6 leading-relaxed">
+            <h3 className="font-display font-bold text-lg text-[#18181B]">No workspaces found</h3>
+            <p className="text-[#52525B] text-xs max-w-sm mt-1.5 mb-6 leading-relaxed">
               Create your first team workspace to start organizing documents, tracking tasks, and collaborating with context-aware AI agents.
             </p>
             <button 
@@ -123,35 +123,35 @@ const Workspaces = () => {
                 key={ws.id} 
                 whileHover={{ y: -2 }}
                 onClick={() => handleWorkspaceClick(ws.id)}
-                className="bg-white border border-[#E4E4E0] rounded-2xl p-5 sm:p-6 flex flex-col justify-between hover:border-[#15803D] hover:shadow-md cursor-pointer transition-all group duration-150"
+                className="bg-white border border-[#E4E4E0] rounded-2xl p-5 sm:p-6 flex flex-col justify-between hover:border-[#18181B] hover:bg-[#E7F0E9]/50 hover:shadow-md cursor-pointer transition-all group duration-150"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#14532D] border border-[#BBF7D0] flex items-center justify-center font-bold text-xs">
+                    <span className="w-8 h-8 rounded-lg bg-[#18181B] text-white border border-[#18181B] flex items-center justify-center font-bold text-xs">
                       {ws.name.substring(0, 2).toUpperCase()}
                     </span>
-                    <span className="text-[11px] font-mono text-[#166534] group-hover:text-[#14532D] flex items-center space-x-0.5">
+                    <span className="text-[11px] font-mono text-[#52525B] group-hover:text-[#18181B] flex items-center space-x-0.5">
                       <span>Open</span>
                       <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
 
-                  <h3 className="font-display font-bold text-base text-[#143A23] group-hover:text-[#15803D] transition-colors truncate">
+                  <h3 className="font-display font-bold text-base text-[#18181B] group-hover:text-[#18181B] transition-colors truncate">
                     {ws.name}
                   </h3>
-                  <div className="mt-1 text-[#166534] text-xs line-clamp-2 min-h-8 leading-relaxed">
+                  <div className="mt-1 text-[#52525B] text-xs line-clamp-2 min-h-8 leading-relaxed">
                     {ws.description}
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#F0FDF4] text-xs text-[#166534]">
-                  <div className="flex items-center space-x-1.5 bg-[#F0FDF4] px-2 py-0.5 rounded-md border border-[#DCFCE7]">
-                    <Users className="w-3.5 h-3.5 text-[#15803D]" />
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#E4E4E0] text-xs text-[#52525B]">
+                  <div className="flex items-center space-x-1.5 bg-[#F4F4F5] px-2 py-0.5 rounded-md border border-[#E4E4E0]">
+                    <Users className="w-3.5 h-3.5 text-[#52525B]" />
                     <span>{ws.member_count} {ws.member_count === 1 ? 'member' : 'members'}</span>
                   </div>
                   
-                  <div className="flex items-center space-x-1 text-[#15803D] text-[11px] font-medium">
-                    <Clock className="w-3 h-3" />
+                  <div className="flex items-center space-x-1 text-[#18181B] text-[11px] font-medium">
+                    <Clock className="w-3 h-3 text-[#52525B]" />
                     <span>Active</span>
                   </div>
                 </div>
@@ -164,7 +164,7 @@ const Workspaces = () => {
       {/* Creation Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-[#143A23]/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-[#18181B]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
             <motion.div 
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -174,56 +174,59 @@ const Workspaces = () => {
             >
               <button 
                 onClick={() => setShowModal(false)}
-                className="absolute right-5 top-5 text-[#166534] hover:text-[#14532D] p-1 rounded-lg hover:bg-[#F0FDF4] transition-colors cursor-pointer"
+                className="absolute right-5 top-5 text-[#52525B] hover:text-[#18181B] p-1 rounded-lg hover:bg-[#F4F4F5] transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <h3 className="font-display font-bold text-xl text-[#143A23] tracking-tight mb-1">Create New Workspace</h3>
-              <p className="text-[#166534] text-xs mb-6 leading-relaxed">Set up an isolated project room with dedicated documents, tasks, and memory.</p>
+              <div className="flex items-center space-x-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-[#18181B] text-white flex items-center justify-center">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-[#18181B]">Create Workspace</h3>
+                  <p className="text-xs text-[#52525B]">Set up a team room for documents, chat, and AI copilot.</p>
+                </div>
+              </div>
 
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#143A23]">Workspace Name</label>
+                  <label className="text-xs font-semibold text-[#18181B]">Workspace Name *</label>
                   <input 
                     type="text" 
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Major Project - Team 7"
-                    className="w-full bg-[#F8F8F6] border border-[#E4E4E0] text-[#143A23] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#15803D]/10 focus:border-[#15803D] transition-all placeholder:text-[#A1A1AA]"
+                    placeholder="e.g. Mobile App Revamp"
+                    className="w-full bg-[#F8F8F6] border border-[#E4E4E0] text-[#18181B] text-sm px-3.5 py-2 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B]/10 focus:border-[#18181B] transition-all"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#143A23]">Description (Optional)</label>
+                  <label className="text-xs font-semibold text-[#18181B]">Description</label>
                   <textarea 
+                    rows={3}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Briefly describe what this workspace is for..."
-                    rows="3"
-                    className="w-full bg-[#F8F8F6] border border-[#E4E4E0] text-[#143A23] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#15803D]/10 focus:border-[#15803D] transition-all placeholder:text-[#A1A1AA] resize-none"
+                    placeholder="What is this workspace focused on?"
+                    className="w-full bg-[#F8F8F6] border border-[#E4E4E0] text-[#18181B] text-sm px-3.5 py-2 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B]/10 focus:border-[#18181B] transition-all resize-none"
                   />
                 </div>
 
-                <div className="flex items-center justify-end space-x-3 pt-4 border-t border-[#F0FDF4]">
+                <div className="flex items-center justify-end space-x-2.5 pt-3">
                   <button 
-                    type="button"
+                    type="button" 
                     onClick={() => setShowModal(false)}
-                    className="btn-secondary"
+                    className="btn-secondary text-xs px-4 py-2"
                   >
                     Cancel
                   </button>
                   <button 
-                    type="submit"
+                    type="submit" 
                     disabled={creating}
-                    className="btn-primary"
+                    className="btn-primary text-xs px-5 py-2 cursor-pointer"
                   >
-                    {creating ? (
-                      <span className="w-4 h-4 border-2 border-[#14532D] border-t-transparent rounded-full animate-spin"></span>
-                    ) : (
-                      <span>Create Workspace</span>
-                    )}
+                    {creating ? 'Creating...' : 'Create Workspace'}
                   </button>
                 </div>
               </form>
