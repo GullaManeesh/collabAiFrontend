@@ -124,7 +124,7 @@ const Landing = () => {
           <div className="border-b border-[#E4E4E0] bg-[#FBFBFA] px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-2 truncate">
               <span className="w-2.5 h-2.5 rounded-full bg-[#18181B] shrink-0"></span>
-              <span className="text-xs font-bold text-[#18181B] truncate">MajorProject / Sprint Launch</span>
+              <span className="text-xs font-bold text-[#18181B] truncate">Your Workspace</span>
               <span className="hidden xs:inline-block text-[11px] font-mono text-[#52525B] bg-[#F4F4F5] px-2 py-0.5 rounded border border-[#E4E4E0]">
                 #team-chat
               </span>

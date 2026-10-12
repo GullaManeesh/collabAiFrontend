@@ -1,426 +1,473 @@
-import React, { useState, useRef } from 'react'
-import { useParams, useOutletContext } from 'react-router-dom'
-import { Send, Bot, ArrowDown, AtSign, BookOpen, Calendar, FileText, ChevronRight } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
-import { motion, AnimatePresence } from 'framer-motion'
 
-const initialMockMessages = [
-  {
-    id: 'm-1',
-    sender_type: 'user',
-    sender_id: 'u1',
-    sender_name: 'Maya',
-    content: 'Can we cross-reference the architecture document and verify if the WebSocket sync meets our concurrency goals?',
-    citations: [],
-    created_at: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: 'm-2',
-    sender_type: 'user',
-    sender_id: 'u-me',
-    sender_name: 'You',
-    content: 'Asking @research and @planner to review the vector database chunks and generate milestone tasks.',
-    citations: [],
-    created_at: new Date(Date.now() - 2400000).toISOString()
-  },
-  {
-    id: 'm-3',
-    sender_type: 'agent',
-    sender_id: 'research',
-    sender_name: 'Research Agent',
-    content: `I queried **system_architecture.pdf** and verified the heartbeat interval and event payload structure. Here is the validated endpoint contract:
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { ArrowDown, CheckCircle2, CircleAlert, LoaderCircle, Send, Wifi, WifiOff } from 'lucide-react'
+import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
-\`\`\`json
-POST /api/v1/copilot/turn
-{
-  "content": "Generate task breakdown for Sprint 1",
-  "temperature": 0.2
+const getErrorMessage = (error) =>
+  error?.response?.data?.detail || error?.message || 'Something went wrong.'
+
+function mergeMessages(current, incoming) {
+  const byId = new Map(current.map((message) => [message.id, message]))
+
+  for (const message of incoming) {
+    if (message?.id) byId.set(message.id, message)
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  )
 }
-\`\`\`
 
-| Component | Channel | Status |
-| :--- | :--- | :--- |
-| WebSocket Hub | /ws/team | Active |
-| Planner Agent | Milestones | Ready |
-`,
-    citations: [
-      { source_type: 'document', filename: 'system_architecture.pdf', page: 4, snippet: 'WebSocket connections manage real-time event distribution with 50ms broadcast delay.' },
-      { source_type: 'document', filename: 'api_contract.md', page: 1, snippet: 'Endpoints require Bearer token validation and workspace permission checks.' }
-    ],
-    created_at: new Date(Date.now() - 1200000).toISOString()
-  }
-]
+function formatTime(value) {
+  if (!value) return ''
+  return new Date(value).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
-const cleanAgentContent = (content) => String(content || '')
-  .replace(/【[^】\n]{1,80}】/g, '')
-  .replace(/\[\d+†L\d+(?:-L\d+)?\]/g, '')
-  .replace(/[ \t]{2,}/g, ' ')
-  .replace(/\n{3,}/g, '\n\n')
-  .trim()
+export default function Chat() {
+  const { id: workspaceId } = useParams()
+  const { user } = useAuth()
 
-const Chat = () => {
-  const { id } = useParams()
-  const context = useOutletContext() || {}
-
-  const [messages, setMessages] = useState(initialMockMessages)
+  const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showMentionPicker, setShowMentionPicker] = useState(false)
-  const [mentionSearch, setMentionSearch] = useState('')
-  const [expandedCitations, setExpandedCitations] = useState({ 'm-3': true })
-  const [showScrollPill, setShowScrollPill] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [connection, setConnection] = useState('connecting')
+  const [error, setError] = useState('')
+  const [showScrollButton, setShowScrollButton] = useState(false)
 
+  const socketRef = useRef(null)
+  const reconnectTimerRef = useRef(null)
+  const reconnectAttemptsRef = useRef(0)
+  const shouldReconnectRef = useRef(true)
   const messagesEndRef = useRef(null)
-  const listContainerRef = useRef(null)
+  const listRef = useRef(null)
+  const contentRef = useRef('')
+  const sendingRef = useRef(false)
 
-  const agents = [
-    { key: 'research', name: 'Research Agent', desc: 'Queries workspace documents and previous decisions', icon: BookOpen },
-    { key: 'planner', name: 'Planner Agent', desc: 'Structures execution roadmaps, milestones and tasks', icon: Calendar },
-    { key: 'docs', name: 'Documentation Agent', desc: 'Drafts comprehensive markdown specs and summaries', icon: FileText }
-  ]
+  const apiBase = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000')
+    .replace(/\/+$/, '')
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    setShowScrollPill(false)
-  }
+  const historyUrl = `/api/workspaces/${workspaceId}/messages`
 
-  const handleContentChange = (e) => {
-    const val = e.target.value
-    setContent(val)
-    
-    const lastWord = val.split(' ').pop()
-    if (lastWord.startsWith('@')) {
-      setShowMentionPicker(true)
-      setMentionSearch(lastWord.substring(1).toLowerCase())
+  const addMessage = useCallback((message) => {
+    setMessages((current) => mergeMessages(current, [message]))
+  }, [])
+
+  useEffect(() => {
+    contentRef.current = content
+  }, [content])
+
+  const loadHistory = useCallback(async () => {
+    if (!workspaceId) return
+
+    try {
+      const response = await api.get(historyUrl, {
+        params: { limit: 50 },
+      })
+
+      setMessages((current) =>
+        mergeMessages(current, response.data.messages || []),
+      )
+      setError('')
+    } catch (err) {
+      setError(`Could not load chat history: ${getErrorMessage(err)}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [historyUrl, workspaceId])
+
+  useEffect(() => {
+    if (!workspaceId) return
+
+    let disposed = false
+    let socket = null
+    let pollInterval = null
+
+    shouldReconnectRef.current = true
+    reconnectAttemptsRef.current = 0
+    setMessages([])
+    setLoading(true)
+    setError('')
+    setConnection('connecting')
+
+    const wsBase = apiBase.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+    const socketUrl = `${wsBase}/api/ws/workspaces/${workspaceId}/chat`
+
+    function connect() {
+      if (disposed || !shouldReconnectRef.current) return
+
+      setConnection(reconnectAttemptsRef.current > 0 ? 'reconnecting' : 'connecting')
+
+      // Null-out the old socket's handlers so a stale socket can't fire events
+      if (socket) {
+        socket.onopen = null
+        socket.onmessage = null
+        socket.onerror = null
+        socket.onclose = null
+      }
+
+      try {
+        socket = new WebSocket(socketUrl)
+        socketRef.current = socket
+      } catch {
+        scheduleReconnect()
+        return
+      }
+
+      socket.onopen = () => {
+        reconnectAttemptsRef.current = 0
+        setConnection('connected')
+        setError('')
+        // Re-fetch history on every (re)connect to catch messages missed during disconnect
+        loadHistory()
+      }
+
+      socket.onmessage = (event) => {
+        console.log('[CHAT] WebSocket event received:', event.data)
+        let payload
+
+        try {
+          payload = JSON.parse(event.data)
+        } catch {
+          return
+        }
+
+        if (payload.type === 'connected') {
+          return
+        }
+
+        if (payload.type === 'ping') {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'pong' }))
+          }
+          return
+        }
+
+        if (payload.type === 'message' && payload.message) {
+          const incoming = payload.message
+
+          setMessages((current) => {
+            const withoutPending = incoming.client_message_id
+              ? current.filter(
+                  (message) =>
+                    message.client_message_id !== incoming.client_message_id ||
+                    message.id === incoming.id,
+                )
+              : current
+
+            return mergeMessages(withoutPending, [incoming])
+          })
+
+          return
+        }
+
+        if (payload.type === 'error') {
+          setError(payload.message || 'The server rejected the message.')
+        }
+      }
+
+      socket.onerror = () => {
+        setConnection('disconnected')
+      }
+
+      socket.onclose = (event) => {
+        if (disposed) return
+
+        setConnection('disconnected')
+
+        if (event.code === 1008) {
+          setError('Chat access was denied. Please sign in again or check workspace membership.')
+          shouldReconnectRef.current = false
+          return
+        }
+
+        scheduleReconnect()
+      }
+    }
+
+    function scheduleReconnect() {
+      if (disposed || !shouldReconnectRef.current) return
+
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+      }
+
+      reconnectAttemptsRef.current += 1
+      const delay = Math.min(
+        1000 * 2 ** Math.min(reconnectAttemptsRef.current - 1, 5),
+        30000,
+      )
+
+      reconnectTimerRef.current = setTimeout(() => {
+        if (!disposed) connect()
+      }, delay)
+    }
+
+    // Initial load + connect
+    loadHistory()
+    connect()
+
+    // Safety-net poll: only re-fetch when disconnected so missed messages
+    // appear once the user reconnects. Runs every 60s as a last resort.
+    pollInterval = setInterval(() => {
+      if (!disposed && socketRef.current?.readyState !== WebSocket.OPEN) {
+        loadHistory()
+      }
+    }, 60000)
+
+    return () => {
+      disposed = true
+      shouldReconnectRef.current = false
+
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+      }
+
+      if (pollInterval) {
+        clearInterval(pollInterval)
+      }
+
+      if (socket) {
+        socket.onclose = null
+        socket.close()
+      }
+
+      if (socketRef.current === socket) {
+        socketRef.current = null
+      }
+    }
+  }, [workspaceId, apiBase, loadHistory])
+
+  useEffect(() => {
+    const container = listRef.current
+    if (!container) return
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight
+
+    if (distanceFromBottom < 120) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setShowScrollButton(false)
     } else {
-      setShowMentionPicker(false)
+      setShowScrollButton(true)
     }
-  }
+  }, [messages])
 
-  const selectMention = (agentKey) => {
-    const words = content.split(' ')
-    words.pop()
-    words.push(`@${agentKey} `)
-    setContent(words.join(' '))
-    setShowMentionPicker(false)
-  }
+  async function handleSend(event) {
+    event.preventDefault()
 
-  const handleSend = (e) => {
-    e.preventDefault()
-    if (!content.trim()) return
+    const text = contentRef.current.trim()
+    const socket = socketRef.current
 
-    const newMessage = {
-      id: `local-${Date.now()}`,
-      sender_type: 'user',
-      sender_id: 'u-me',
-      sender_name: 'You',
-      content: content,
-      citations: [],
-      created_at: new Date().toISOString()
+    if (!text || sendingRef.current) return
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setError('Chat is reconnecting. Please try again when connected.')
+      return
     }
 
-    setMessages((prev) => [...prev, newMessage])
+    const clientMessageId = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    const optimisticMessage = {
+      id: `pending-${clientMessageId}`,
+      client_message_id: clientMessageId,
+      workspace_id: workspaceId,
+      sender_id: user?.id,
+      sender_name: user?.name || user?.username || 'You',
+      sender_picture: user?.picture || null,
+      content: text,
+      created_at: now,
+      pending: true,
+    }
+
+    // Render immediately, without waiting for MongoDB.
+    setMessages((current) => mergeMessages(current, [optimisticMessage]))
+
+    sendingRef.current = true
+    setSending(true)
+    setError('')
     setContent('')
-    setShowMentionPicker(false)
-    setTimeout(scrollToBottom, 50)
-  }
+    contentRef.current = ''
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend(e)
+    try {
+      socket.send(
+        JSON.stringify({
+          type: 'send_message',
+          content: text,
+          client_message_id: clientMessageId,
+        }),
+      )
+    } catch {
+      setError('Could not send the message. Please try again.')
+
+      setMessages((current) =>
+        current.filter((message) => message.id !== optimisticMessage.id),
+      )
+
+      setContent(text)
+      contentRef.current = text
+    } finally {
+      sendingRef.current = false
+      setSending(false)
     }
-    if (e.key === 'Escape') {
-      setShowMentionPicker(false)
-    }
   }
 
-  const toggleCitations = (msgId) => {
-    setExpandedCitations((prev) => ({
-      ...prev,
-      [msgId]: !prev[msgId]
-    }))
-  }
+  const connectionLabel = {
+    connected: 'Connected',
+    connecting: 'Connecting',
+    reconnecting: 'Reconnecting',
+    disconnected: 'Disconnected',
+  }[connection]
 
-  const filteredAgents = agents.filter(a => a.key.includes(mentionSearch))
+  const isConnected = connection === 'connected'
 
   return (
-    <div className="absolute inset-0 flex flex-col bg-[#F8F8F6] text-[#18181B] h-full overflow-hidden">
-      {/* Scroll indicator pill */}
-      <AnimatePresence>
-        {showScrollPill && (
-          <motion.button 
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            onClick={scrollToBottom}
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-[#18181B] text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md z-20 hover:bg-[#27272A] transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
-          >
-            <span>New messages</span>
-            <ArrowDown className="w-3.5 h-3.5" />
-          </motion.button>
-        )}
-      </AnimatePresence>
+    <div className="absolute inset-0 flex h-full min-h-0 flex-col overflow-hidden bg-[#F8F8F6] text-[#18181B]">
+      <header className="flex shrink-0 items-center justify-between border-b border-[#E4E4E0] bg-white px-4 py-3 sm:px-6">
+        <div>
+          <h2 className="text-sm font-bold sm:text-base">Team Chat</h2>
+          <p className="mt-0.5 text-[11px] text-[#71717A]">
+            Messages are shared with workspace members.
+          </p>
+        </div>
 
-      {/* Messages Viewport */}
-      <div 
-        ref={listContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6 space-y-5"
-        onScroll={() => {
-          const container = listContainerRef.current
-          if (container && container.scrollHeight - container.scrollTop - container.clientHeight < 40) {
-            setShowScrollPill(false)
-          }
+        <div className="flex items-center gap-1.5 rounded-full border border-[#E4E4E0] bg-[#F8F8F6] px-2.5 py-1.5">
+          {isConnected ? (
+            <Wifi className="h-3.5 w-3.5 text-green-700" />
+          ) : connection === 'connecting' || connection === 'reconnecting' ? (
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin text-amber-700" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5 text-red-600" />
+          )}
+          <span className="text-[10px] font-semibold">{connectionLabel}</span>
+        </div>
+      </header>
+
+      {error && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-800">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="ml-auto font-semibold"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <main
+        ref={listRef}
+        onScroll={(event) => {
+          const element = event.currentTarget
+          setShowScrollButton(
+            element.scrollHeight - element.scrollTop - element.clientHeight > 120,
+          )
         }}
+        className="relative flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6"
       >
         {loading ? (
-          <div className="w-full space-y-4 pt-4">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="flex flex-col space-y-2 max-w-[65%]">
-                <div className="h-3 w-20 bg-[#E4E4E0] rounded animate-pulse"></div>
-                <div className="h-14 bg-white border border-[#E4E4E0] rounded-xl animate-pulse shadow-xs"></div>
+          <div className="space-y-4">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="max-w-[70%] animate-pulse">
+                <div className="mb-2 h-3 w-24 rounded bg-[#E4E4E0]" />
+                <div className="h-12 rounded-xl border border-[#E4E4E0] bg-white" />
               </div>
             ))}
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 select-none max-w-lg mx-auto">
-            <div className="w-12 h-12 rounded-2xl bg-[#F4F4F2] border border-[#E4E4E0] flex items-center justify-center text-[#18181B] mb-4 shadow-xs">
-              <Bot className="w-6 h-6" />
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E4E4E0] bg-white">
+              <Send className="h-5 w-5" />
             </div>
-            <h3 className="font-display font-bold text-lg text-[#18181B]">Team Discussion</h3>
-            <p className="text-[#71717A] text-xs mt-1.5 max-w-sm leading-relaxed">
-              Collaborate directly with teammates or prompt specialist AI agents with deep workspace context.
+            <h3 className="text-base font-bold">Start the conversation</h3>
+            <p className="mt-1 max-w-xs text-xs leading-relaxed text-[#71717A]">
+              Send a message to your teammates. New messages will appear here instantly.
             </p>
-            
-            {/* Quick Mention Suggestions */}
-            <div className="mt-6 w-full flex flex-col gap-2">
-              <div className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                Specialist AI Agents Ready:
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {agents.map((agent) => (
-                  <button
-                    key={agent.key}
-                    onClick={() => selectMention(agent.key)}
-                    className="p-3 bg-white border border-[#E4E4E0] rounded-xl text-left hover:border-[#18181B] hover:bg-[#E7F0E9]/60 hover:shadow-xs transition-all group cursor-pointer"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span className="w-6 h-6 rounded-lg bg-[#F4F4F2] text-[#18181B] flex items-center justify-center">
-                        <agent.icon className="w-3.5 h-3.5" />
-                      </span>
-                      <span className="font-semibold text-xs text-[#18181B]">@{agent.key}</span>
-                    </div>
-                    <div className="text-[10px] text-[#71717A] mt-1.5 leading-tight">{agent.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         ) : (
-          <div className="w-full space-y-4">
-            {messages.map((msg) => {
-              const isMe = msg.sender_id === 'u-me'
-              const isAgent = msg.sender_type === 'agent'
-              const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '10:30'
-              
-              if (isAgent) {
-                return (
-                  <motion.article 
-                    key={msg.id} 
-                    initial={{ opacity: 0, y: 6 }} 
-                    animate={{ opacity: 1, y: 0 }} 
-                    transition={{ duration: 0.15 }} 
-                    className="w-full bg-white border border-[#E4E4E0] border-l-[3px] border-l-[#18181B] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-[#18181B] text-white flex items-center justify-center">
-                          <Bot className="w-3.5 h-3.5" />
-                        </div>
-                        <h4 className="font-display font-bold text-xs text-[#18181B]">{msg.sender_name}</h4>
-                        <span className="text-[10px] bg-[#F4F4F2] text-[#52525B] border border-[#E4E4E0] px-1.5 py-0.2 rounded font-mono font-medium">
-                          Agent
-                        </span>
-                      </div>
-                      <div className="text-[11px] font-mono text-[#71717A]">
-                        {timeStr}
-                      </div>
-                    </div>
-                    
-                    <div className="chat-markdown select-text pl-1 overflow-x-auto">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
-                        components={{
-                          table: ({ node, ...props }) => (
-                            <div className="chat-markdown-table-wrap">
-                              <table {...props} />
-                            </div>
-                          ),
-                          th: ({ node, ...props }) => <th className="chat-markdown-th" {...props} />,
-                          td: ({ node, ...props }) => <td className="chat-markdown-td" {...props} />
-                        }}
-                      >
-                        {cleanAgentContent(msg.content)}
-                      </ReactMarkdown>
-                    </div>
-                    
-                    {/* Citations list */}
-                    {msg.citations && msg.citations.length > 0 && (
-                      <div className="pt-2.5 border-t border-[#F4F4F2] select-none">
-                        <button 
-                          onClick={() => toggleCitations(msg.id)}
-                          className="flex items-center space-x-1.5 text-xs text-[#18181B] font-semibold hover:text-[#365742] focus:outline-none cursor-pointer"
-                        >
-                          <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${expandedCitations[msg.id] ? 'rotate-90' : ''}`} />
-                          <span>{msg.citations.length} verified {msg.citations.length === 1 ? 'source' : 'sources'}</span>
-                        </button>
-                        
-                        {expandedCitations[msg.id] && (
-                          <div className="mt-2.5 space-y-2 pl-2">
-                            {msg.citations.map((c, i) => (
-                              <div key={i} className="bg-[#F8F8F6] border border-[#E4E4E0] hover:bg-[#E7F0E9]/50 rounded-xl p-2.5 text-xs flex flex-col font-sans transition-colors">
-                                <span className="text-[#18181B] font-semibold truncate flex items-center space-x-1.5">
-                                  <FileText className="w-3.5 h-3.5 shrink-0 text-[#71717A]" />
-                                  <span>[{i+1}] {c.source_type === 'document' ? `${c.filename || 'Document'} (Page ${c.page || 1})` : 'Chat reference'}</span>
-                                </span>
-                                <span className="mt-1 line-clamp-2 leading-relaxed text-[#52525B] pl-5 text-[11px] italic">
-                                  "{c.snippet || 'Snippet content available in workspace brain'}"
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </motion.article>
-                )
-              }
+          messages.map((message) => {
+            const isMe = message.sender_id === user?.id
+            const senderName = isMe ? 'You' : message.sender_name
 
-              return (
-                <motion.div 
-                  key={msg.id} 
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className={`flex flex-col space-y-1 ${isMe ? 'items-end' : 'items-start'}`}
-                >
-                  <div className="flex items-center space-x-2 text-[11px] text-[#71717A] select-none px-1">
-                    <span className="font-semibold text-[#18181B]">{msg.sender_name}</span>
-                    <span>·</span>
-                    <span>{timeStr}</span>
-                  </div>
-                  
-                  <div 
-                    className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm select-text leading-relaxed whitespace-pre-wrap ${
-                      isMe 
-                        ? 'bg-[#18181B] text-white rounded-tr-sm shadow-xs' 
-                        : 'bg-white border border-[#E4E4E0] text-[#18181B] rounded-tl-sm shadow-xs'
+            return (
+              <article
+                key={message.id}
+                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+              >
+                <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-[#71717A]">
+                  <span className="font-semibold text-[#18181B]">{senderName}</span>
+                  <span>·</span>
+                  <time dateTime={message.created_at}>
+                    {formatTime(message.created_at)}
+                  </time>
+                </div>
+
+                <div
+                  className={`max-w-[88%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:max-w-[70%] ${isMe
+                      ? 'rounded-tr-sm bg-[#18181B] text-white'
+                      : 'rounded-tl-sm border border-[#E4E4E0] bg-white text-[#18181B]'
                     }`}
-                  >
-                    {msg.content.split(' ').map((word, wIdx) => {
-                      if (word.startsWith('@')) {
-                        return (
-                          <span 
-                            key={wIdx} 
-                            className={`font-semibold font-mono text-xs px-1.5 py-0.5 rounded mr-1 ${
-                              isMe 
-                                ? 'bg-white/20 text-white' 
-                                : 'bg-[#F4F4F2] text-[#18181B] border border-[#E4E4E0]'
-                            }`}
-                          >
-                            {word}
-                          </span>
-                        )
-                      }
-                      return word + ' '
-                    })}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
+                >
+                  {message.content}
+                </div>
+              </article>
+            )
+          })
         )}
 
         <div ref={messagesEndRef} />
-      </div>
+      </main>
 
-      {/* Composer Input Area */}
-      <div className="p-3 sm:p-4 bg-white/95 backdrop-blur-md border-t border-[#E4E4E0] relative select-none shrink-0">
-        {/* Mention picker dropdown */}
-        <AnimatePresence>
-          {showMentionPicker && filteredAgents.length > 0 && (
-            <motion.div 
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              className="absolute bottom-full left-4 sm:left-8 mb-3 w-[calc(100%-2rem)] sm:w-72 bg-white border border-[#E4E4E0] rounded-xl shadow-lg z-30 divide-y divide-[#F4F4F2] overflow-hidden"
-            >
-              <div className="px-3 py-2 text-[10px] font-semibold text-[#71717A] uppercase tracking-wider bg-[#F8F8F6]">
-                Mention AI Specialist
-              </div>
-              {filteredAgents.map((a) => (
-                <button 
-                  key={a.key}
-                  onClick={() => selectMention(a.key)}
-                  className="w-full text-left px-3.5 py-2.5 hover:bg-[#E7F0E9] hover:text-[#365742] flex items-center space-x-2.5 transition-colors cursor-pointer group"
-                >
-                  <span className="w-7 h-7 rounded-lg bg-[#F4F4F2] text-[#18181B] flex items-center justify-center shrink-0 group-hover:bg-[#C8E6C9] group-hover:text-[#2D5A3E]">
-                    <a.icon className="w-3.5 h-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-[#18181B] group-hover:text-[#365742]">@{a.key}</div>
-                    <div className="text-[10px] text-[#71717A] truncate leading-tight mt-0.5">{a.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </motion.div>
+      {showScrollButton && (
+        <button
+          type="button"
+          onClick={() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            setShowScrollButton(false)
+          }}
+          className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#18181B] px-3.5 py-2 text-xs font-semibold text-white shadow-lg"
+        >
+          <ArrowDown className="h-3.5 w-3.5" />
+          Latest messages
+        </button>
+      )}
+
+      <form
+        onSubmit={handleSend}
+        className="flex shrink-0 items-center gap-2 border-t border-[#E4E4E0] bg-white p-3 sm:p-4"
+      >
+        <input
+          type="text"
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          maxLength={5000}
+          placeholder="Message your teammates..."
+          aria-label="Message your teammates"
+          className="min-w-0 flex-1 rounded-xl border border-[#E4E4E0] bg-[#F8F8F6] px-4 py-3 text-sm outline-none transition focus:border-[#18181B] focus:ring-2 focus:ring-black/10"
+        />
+
+        <button
+          type="submit"
+          disabled={!content.trim() || sending || !isConnected}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#18181B] text-white transition hover:bg-[#27272A] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Send message"
+          title="Send message"
+        >
+          {sending ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
           )}
-        </AnimatePresence>
-
-        <div className="w-full">
-          <form 
-            onSubmit={handleSend} 
-            className="flex items-center space-x-2 bg-white border border-[#E4E4E0] hover:border-[#18181B] focus-within:border-[#18181B] focus-within:ring-2 focus-within:ring-[#18181B]/10 rounded-xl px-3 py-1.5 transition-all shadow-xs"
-          >
-            <button
-              type="button"
-              onClick={() => setShowMentionPicker(!showMentionPicker)}
-              className="text-[#71717A] hover:text-[#18181B] p-1.5 rounded-lg hover:bg-[#E7F0E9] hover:text-[#365742] transition-colors shrink-0 cursor-pointer"
-              title="Mention an Agent"
-            >
-              <AtSign className="w-4 h-4" />
-            </button>
-
-            <input 
-              type="text"
-              required
-              value={content}
-              onChange={handleContentChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message or mention @research, @planner, @docs..."
-              className="flex-grow bg-transparent text-[#18181B] text-xs sm:text-sm placeholder:text-[#A1A1AA] focus:outline-none py-1.5 min-w-0"
-            />
-
-            <button 
-              type="submit"
-              disabled={!content.trim()}
-              className="w-8 h-8 rounded-lg bg-[#18181B] text-white hover:bg-[#27272A] disabled:opacity-30 disabled:hover:bg-[#18181B] flex items-center justify-center transition-all active:scale-95 shadow-xs shrink-0 cursor-pointer"
-              title="Send Message"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </form>
-          <div className="flex items-center justify-between text-[10px] text-[#71717A] mt-1.5 px-1 font-mono">
-            <span className="truncate">Type @ to summon specialist agents</span>
-            <span className="hidden sm:inline">Enter to send · Shift+Enter for newline</span>
-          </div>
-        </div>
-      </div>
+        </button>
+      </form>
     </div>
   )
 }
-
-export default Chat

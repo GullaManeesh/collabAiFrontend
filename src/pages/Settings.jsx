@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useOutletContext } from 'react-router-dom'
 import { Users, UserPlus, UserMinus, Shield, Mail, Calendar, Settings as SettingsIcon, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const initialMembers = [
@@ -10,6 +10,7 @@ const initialMembers = [
 
 const Settings = () => {
   const { id } = useParams()
+  const { workspace } = useOutletContext() || {}
   
   const [members, setMembers] = useState(initialMembers)
   const [email, setEmail] = useState('')
@@ -64,7 +65,7 @@ const Settings = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <div className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Workspace Name</div>
-              <div className="text-sm font-bold text-[#18181B] mt-1">MajorProject / Sprint Launch</div>
+              <div className="text-sm font-bold text-[#18181B] mt-1">{workspace?.name || 'Workspace'}</div>
             </div>
 
             <div>

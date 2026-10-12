@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Outlet, NavLink, useParams, Link, useLocation } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Outlet, NavLink, useParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { 
   MessageSquare, 
   Bot, 
@@ -10,34 +11,63 @@ import {
   Menu, 
   X, 
   ArrowLeft,
-  Brain
+  LogOut
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import api from '../../api/client'
 
 const WorkspaceLayout = () => {
   const { id = 'demo-workspace' } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      navigate('/login')
+    }
+  }
 
   // Pure frontend state mock for outlet context to satisfy nested routes
   const [wsMessages, setWsMessages] = useState([])
   const [lastWsMessage, setLastWsMessage] = useState(null)
   const [typingUsers, setTypingUsers] = useState({})
 
-  const mockWorkspace = {
+  const [workspace, setWorkspace] = useState({
     id: id,
-    name: 'MajorProject / Sprint Launch',
-    description: 'Autonomous multi-agent workspace for sprint management',
+    name: 'Loading…',
+    description: '',
     channels: {
       team_chat: 'team_chat_channel',
       copilot: 'copilot_channel'
     },
-    members: [
-      { user_id: 'u1', name: 'Maya', role: 'owner', joined_at: new Date().toISOString() },
-      { user_id: 'u2', name: 'Alex', role: 'member', joined_at: new Date().toISOString() },
-      { user_id: 'u3', name: 'You', role: 'member', joined_at: new Date().toISOString() }
-    ]
-  }
+    members: []
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchWorkspace = async () => {
+      try {
+        const res = await api.get(`/api/workspaces/${id}`)
+        if (!cancelled && res.data) {
+          setWorkspace(prev => ({
+            ...prev,
+            ...res.data,
+            name: res.data.name || prev.name,
+          }))
+        }
+      } catch (err) {
+        console.error('Failed to fetch workspace details:', err)
+      }
+    }
+    fetchWorkspace()
+    return () => { cancelled = true }
+  }, [id])
 
   const navItems = [
     { path: `/w/${id}/chat`, label: 'Team Chat', icon: MessageSquare, badge: 'Live' },
@@ -56,7 +86,7 @@ const WorkspaceLayout = () => {
     setWsMessages,
     lastWsMessage,
     setLastWsMessage,
-    workspace: mockWorkspace,
+    workspace: workspace,
     refreshStats: () => {}
   }
 
@@ -73,7 +103,7 @@ const WorkspaceLayout = () => {
             <div className="min-w-0">
               <span className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider block">Workspace</span>
               <h1 className="font-display font-bold text-sm text-[#18181B] truncate group-hover:text-[#52525B] transition-colors">
-                {mockWorkspace.name}
+                {workspace.name}
               </h1>
             </div>
           </Link>
@@ -120,26 +150,30 @@ const WorkspaceLayout = () => {
           })}
         </div>
 
-        {/* Memory Index Widget */}
-        <div className="p-4 border-t border-[#E4E4E0] bg-[#F8F8F6]">
-          <div className="bg-white border border-[#E4E4E0] rounded-xl p-3.5 shadow-xs space-y-2 hover:bg-[#E7F0E9]/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-1.5 text-xs font-bold text-[#18181B]">
-                <span className="h-2 w-2 rounded-full bg-[#18181B]" />
-                <Brain className="w-4 h-4 text-[#18181B]" />
-                <span>Memory Index</span>
+        {/* User Account & Logout */}
+        <div className="p-3 border-t border-[#E4E4E0] bg-[#F8F8F6] space-y-2">
+          <div className="flex items-center space-x-2.5 px-2.5 py-2 bg-white border border-[#E4E4E0] rounded-xl shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-[#18181B] text-white flex items-center justify-center font-display font-bold text-xs shrink-0 shadow-2xs">
+              {user?.username ? user.username.slice(0, 2).toUpperCase() : (user?.email ? user.email.slice(0, 2).toUpperCase() : 'ME')}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-[#18181B] truncate leading-tight">
+                {user?.username || user?.name || user?.email?.split('@')[0] || 'My Account'}
               </div>
-              <span className="text-[10px] font-mono text-[#18181B] bg-[#F4F4F5] border border-[#E4E4E0] px-1.5 py-0.5 rounded font-medium">
-                active
-              </span>
+              <div className="text-[11px] text-[#71717A] truncate">
+                {user?.email || 'Logged in'}
+              </div>
             </div>
-            <div className="text-xl font-extrabold text-[#18181B]">
-              12 <span className="text-xs font-normal text-[#71717A]">chunks</span>
-            </div>
-            <p className="text-[11px] text-[#71717A] leading-tight">
-              Isolated contextual vector knowledge
-            </p>
           </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center space-x-2 py-2 px-3 bg-white hover:bg-[#FEF2F2] border border-[#E4E4E0] hover:border-[#FEE2E2] rounded-xl text-xs font-semibold text-[#52525B] hover:text-[#DC2626] transition-all duration-150 cursor-pointer shadow-2xs group"
+            title="Log Out"
+          >
+            <LogOut className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5 text-[#71717A] group-hover:text-[#DC2626]" />
+            <span>Log Out</span>
+          </button>
         </div>
       </aside>
 
@@ -168,7 +202,7 @@ const WorkspaceLayout = () => {
             <span className="hidden sm:block text-[#D4D4D8]">/</span>
 
             <div className="flex items-center space-x-2 truncate">
-              <span className="text-xs font-bold text-[#18181B] truncate">{mockWorkspace.name}</span>
+              <span className="text-xs font-bold text-[#18181B] truncate">{workspace.name}</span>
             </div>
           </div>
 
@@ -249,7 +283,7 @@ const WorkspaceLayout = () => {
                   })}
                 </div>
 
-                <div className="p-4 border-t border-[#E4E4E0] bg-[#F8F8F6]">
+                <div className="p-4 border-t border-[#E4E4E0] bg-[#F8F8F6] space-y-2">
                   <Link
                     to="/workspaces"
                     onClick={() => setMobileMenuOpen(false)}
@@ -258,6 +292,16 @@ const WorkspaceLayout = () => {
                     <ArrowLeft className="w-4 h-4" />
                     <span>Switch Workspace</span>
                   </Link>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      handleLogout()
+                    }}
+                    className="flex items-center justify-center space-x-2 w-full py-2.5 bg-white hover:bg-[#FEF2F2] border border-[#E4E4E0] hover:border-[#FEE2E2] rounded-xl text-xs font-semibold text-[#52525B] hover:text-[#DC2626] transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Log Out</span>
+                  </button>
                 </div>
               </motion.div>
             </>
